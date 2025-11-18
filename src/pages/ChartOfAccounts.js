@@ -34,13 +34,11 @@ function ChartOfAccounts() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
 
-  // Show/hide the add/edit form (admins only)
   const [showForm, setShowForm] = useState(false);
   useEffect(() => {
     if (!roleLoading) setShowForm(canManage);
   }, [roleLoading, canManage]);
 
-  // Filters (applied)
   const [filters, setFilters] = useState({
     name: "",
     number: "",
@@ -50,7 +48,6 @@ function ChartOfAccounts() {
     maxAmount: "",
     activeOnly: true,
   });
-  // Filters (draft while typing)
   const [filterDraft, setFilterDraft] = useState({
     name: "",
     number: "",
@@ -61,11 +58,9 @@ function ChartOfAccounts() {
     activeOnly: true,
   });
 
-  // Email modal state
   const [emailOpen, setEmailOpen] = useState(false);
   const [emailTo, setEmailTo] = useState({ role: "", account: null });
 
-  // Add/Edit form state
   const emptyForm = {
     name: "",
     number: "",
@@ -83,23 +78,22 @@ function ChartOfAccounts() {
   };
   const [form, setForm] = useState(emptyForm);
 
-  // Load accounts
   useEffect(() => {
     const load = async () => {
       const snap = await getDocs(collection(db, "accounts"));
       setAccounts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
       setLoading(false);
-      setFilterDraft((d) => ({ ...d, ...filters })); // sync once
+      setFilterDraft((d) => ({ ...d, ...filters }));
     };
     load();
   }, []); // eslint-disable-line
 
-  // Apply filters
   const filtered = useMemo(() => {
     return accounts
       .filter((a) => {
         if (filters.activeOnly && a.active === false) return false;
-        if (filters.name && !a.name.toLowerCase().includes(filters.name.toLowerCase())) return false;
+        if (filters.name && !a.name.toLowerCase().includes(filters.name.toLowerCase()))
+          return false;
         if (filters.number && !String(a.number).startsWith(filters.number)) return false;
         if (filters.category && a.category !== filters.category) return false;
         if (
@@ -115,7 +109,6 @@ function ChartOfAccounts() {
       .sort((x, y) => String(x.order).localeCompare(String(y.order)));
   }, [accounts, filters]);
 
-  // --- Validation & persistence helpers ---
   const ensureUnique = async (name, number, excludeId = null) => {
     const nameQ = query(collection(db, "accounts"), where("name", "==", name));
     const nameSnap = await getDocs(nameQ);
@@ -168,7 +161,7 @@ function ChartOfAccounts() {
     await addDoc(collection(db, "eventLogs"), {
       entity: "account",
       entityId,
-      action, // create | update | deactivate
+      action,
       before: before || null,
       after: after || null,
       user: userEmail || fallbackEmail,
@@ -176,7 +169,6 @@ function ChartOfAccounts() {
     });
   };
 
-  // Create / Edit / Deactivate
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!canManage) return alert("View-only: your role cannot add accounts.");
@@ -244,11 +236,9 @@ function ChartOfAccounts() {
     setAccounts(accounts.map((a) => (a.id === acc.id ? { ...a, active: false } : a)));
   };
 
-  // Navigation
   const goLedger = (acc) => navigate(`/ledger/${acc.id}`);
   const goDetails = (acc) => navigate(`/accounts/${acc.id}`);
 
-  // Row actions dropdown (extended with email + view logs)
   const onRowAction = (acc, value) => {
     if (!value) return;
     switch (value) {
@@ -261,9 +251,13 @@ function ChartOfAccounts() {
       case "viewLogs":
         return navigate(`/event-logs?accountId=${encodeURIComponent(acc.id)}`);
       case "emailManager":
-        setEmailTo({ role: "manager", account: acc }); setEmailOpen(true); return;
+        setEmailTo({ role: "manager", account: acc });
+        setEmailOpen(true);
+        return;
       case "emailAccountant":
-        setEmailTo({ role: "accountant", account: acc }); setEmailOpen(true); return;
+        setEmailTo({ role: "accountant", account: acc });
+        setEmailOpen(true);
+        return;
       default:
         return;
     }
@@ -305,7 +299,6 @@ function ChartOfAccounts() {
           </button>
         </div>
 
-        {/* Add / Edit form (admins only) */}
         {canManage && showForm && (
           <form
             onSubmit={editingId ? (e) => { e.preventDefault(); saveEdit(); } : handleSubmit}
@@ -452,7 +445,6 @@ function ChartOfAccounts() {
           </form>
         )}
 
-        {/* Filters (manual apply with button or Enter) */}
         <section
           style={styles.filters}
           onKeyDown={(e) => {
@@ -544,7 +536,6 @@ function ChartOfAccounts() {
           </button>
         </section>
 
-        {/* Table */}
         <div style={{ overflowX: "auto" }}>
           <table style={styles.table}>
             <thead>
@@ -570,16 +561,32 @@ function ChartOfAccounts() {
                   <tr key={acc.id} style={{ opacity: acc.active === false ? 0.5 : 1 }}>
                     <td style={styles.td}>{acc.order}</td>
                     <td style={styles.td}>
-                      <button onClick={() => goLedger(acc)} style={styles.linkBtn} title="Open ledger for this account">
+                      <button
+                        onClick={() => goLedger(acc)}
+                        style={styles.linkBtn}
+                        title="Open ledger for this account"
+                      >
                         {acc.name}
                       </button>
                     </td>
-                    <td style={styles.td}>{acc.number}</td>
+                    <td style={styles.td}>
+                      <button
+                        onClick={() => goLedger(acc)}
+                        style={styles.linkBtn}
+                        title="Open ledger for this account"
+                      >
+                        {acc.number}
+                      </button>
+                    </td>
                     <td style={styles.td}>{acc.category}</td>
                     <td style={styles.td}>{acc.subcategory}</td>
                     <td style={styles.td}>{acc.normalSide}</td>
-                    <td style={{ ...styles.td, textAlign: "right" }}>{formatMoney(acc.balance)}</td>
-                    <td style={styles.td}>{acc.active === false ? "Inactive" : "Active"}</td>
+                    <td style={{ ...styles.td, textAlign: "right" }}>
+                      {formatMoney(acc.balance)}
+                    </td>
+                    <td style={styles.td}>
+                      {acc.active === false ? "Inactive" : "Active"}
+                    </td>
                     <td style={styles.td}>
                       <select
                         defaultValue=""
@@ -609,7 +616,6 @@ function ChartOfAccounts() {
 
       <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
 
-      {/* Single email modal for the page */}
       <SendEmailModal
         open={emailOpen}
         onClose={() => setEmailOpen(false)}

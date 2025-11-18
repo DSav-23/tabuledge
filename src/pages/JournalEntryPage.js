@@ -54,16 +54,54 @@ export default function JournalEntryPage() {
     load();
   }, []);
 
+  const normalizeStatus = (s) => {
+    if (!s) return "pending";
+    s = s.toLowerCase();
+    if (["approved", "rejected", "pending"].includes(s)) return s;
+
+    // Map old synonyms to Sprint-approved values
+    if (s === "pendingapproval" || s === "submitted") return "pending";
+
+    return "pending"; // default fallback
+  };
+
+  const normalizeDate = (entry) => {
+  // 1. Prefer explicit "date" field from JournalEntryPage
+    if (entry.date) return entry.date;
+
+  // 2. Fallback: convert Firestore createdAt to yyyy-mm-dd
+    if (entry.createdAt?.toDate) {
+      return entry.createdAt.toDate().toISOString().slice(0, 10);
+  }
+
+  // 3. As a last fallback
+  return "";
+};
+
+
   // Load the current user's journal entries (and others, accountant should be able to view all entries)
   useEffect(() => {
     const loadEntries = async () => {
-      // Basic fetch of all entries; we can filter client-side for speed and simplicity
+      
       const q = query(collection(db, "journalEntries"), orderBy("createdAt", "desc"));
       const snap = await getDocs(q);
-      setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    };
-    loadEntries();
-  }, []);
+      setEntries(
+        snap.docs.map(d => {
+          const data = d.data();
+           return {
+             id: d.id,
+              ...data,
+              status: normalizeStatus(data.status), 
+              filterDate: normalizeDate(data),
+           };
+         })
+     );
+  };
+
+   loadEntries();
+}, []);
+    
+ 
 
   const totalDebits = useMemo(
     () => debits.reduce((s, r) => s + moneyToNumber(r.amount), 0),
@@ -207,20 +245,24 @@ export default function JournalEntryPage() {
   const filteredEntries = useMemo(() => {
     return entries.filter((e) => {
       if (statusFilter !== "all" && e.status !== statusFilter) return false;
-      if (fromDate && e.date < fromDate) return false;
-      if (toDate && e.date > toDate) return false;
+      if (fromDate && e.filterDate < fromDate) return false;
+      if (toDate && e.filterDate > toDate) return false;
 
       if (searchTerm) {
         const st = searchTerm.toLowerCase();
+
         const inAccounts =
           Array.isArray(e.lines) &&
           e.lines.some(
             ln =>
               (ln.accountName || "").toLowerCase().includes(st) ||
+            (ln.accountNumber || "").toLowerCase?.().includes(st) || 
               String(ln.amount).includes(st)
           );
         const inDesc = (e.description || "").toLowerCase().includes(st);
-        return inAccounts || inDesc;
+        const inDate =  (e.date || "").includes(st) ||(e.filterDate || "").includes(st);   
+        return inAccounts || inDesc || inDate;
+
       }
       return true;
     });
@@ -342,7 +384,7 @@ export default function JournalEntryPage() {
 
       {/* Journal Entries list (accountant view) */}
       <div style={{ border: "1px solid #ddd", padding: 16 }}>
-        <h3>Your Journal Entries</h3>
+        <h3>All Journal Entries</h3>
         <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
             <option value="all">All statuses</option>
@@ -419,4 +461,4 @@ export default function JournalEntryPage() {
       </div>
     </div>
   );
-}
+  }

@@ -14,6 +14,9 @@ import {
 import { formatMoney } from "../utils/format";
 import { useNavigate } from "react-router-dom";
 
+
+
+
 function ManagerDashboard() {
   const navigate = useNavigate();
   const userEmail = auth?.currentUser?.email || "manager@example.com";
@@ -313,38 +316,66 @@ function ManagerDashboard() {
     );
   };
 
-  const tableRows = useMemo(
-    () =>
-      filteredEntries.map((e) => {
-        const debs = (e.lines || []).filter(l => l.side === "debit");
-        const creds = (e.lines || []).filter(l => l.side === "credit");
-        // legacy display fallback:
-        const showDebs = (debs.length ? debs : e.debits || []).map((d, i) => (
-          <div key={`d-${i}`}>{d.accountName}: ${Number(d.amount || 0).toFixed(2)}</div>
-        ));
-        const showCreds = (creds.length ? creds : e.credits || []).map((c, i) => (
-          <div key={`c-${i}`}>{c.accountName}: ${Number(c.amount || 0).toFixed(2)}</div>
-        ));
-        return (
-          <tr key={e.id}>
-            <td style={td}>{e.createdAt?.toDate ? e.createdAt.toDate().toLocaleDateString() : "—"}</td>
-            <td style={td}>{e.description || "—"}</td>
-            <td style={td}>{showDebs}</td>
-            <td style={td}>{showCreds}</td>
-            <td style={td}>{e.status || "pending"}</td>
-            <td style={td}>{e.createdBy || e.preparedBy || "—"}</td>
-            <td style={td}>
-              {e.status === "pending" && (
-                <>
-                  <button onClick={() => handleApprove(e)}>Approve</button>{" "}
-                  <button onClick={() => handleReject(e)}>Reject</button>
-                </>
-              )}
-            </td>
-          </tr>
-        );
-      }),
-    [filteredEntries]
+  const tableRows = useMemo(() =>
+    filteredEntries.map((e) => {
+      const debs = (e.lines || []).filter((l) => l.side === "debit");
+      const creds = (e.lines || []).filter((l) => l.side === "credit");
+      // legacy display fallback:
+      const showDebs = (debs.length ? debs : e.debits || []).map((d, i) => (
+        <div key={`d-${i}`}>{d.accountName}: ${Number(d.amount || 0).toFixed(2)}</div>
+      ));
+      const showCreds = (creds.length ? creds : e.credits || []).map((c, i) => (
+        <div key={`c-${i}`}>{c.accountName}: ${Number(c.amount || 0).toFixed(2)}</div>
+      ));
+
+      return (
+        <tr key={e.id}>
+          <td style={td}>
+            {e.createdAt?.toDate ? e.createdAt.toDate().toLocaleDateString() : "—"}
+          </td>
+
+          <td style={td}>{e.description || "—"}</td>
+
+          <td style={td}>{showDebs}</td>
+          <td style={td}>{showCreds}</td>
+
+          {/* Attachments Column */}
+          <td style={td}>
+            {(e.attachments || []).length === 0 ? (
+              <span style={{ opacity: 0.7 }}>No files</span>
+            ) : (
+              e.attachments.map((a, i) => (
+                <div key={i}>
+                  <a
+                    href={a.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "#2563eb", textDecoration: "underline" }}
+                  >
+                    {a.name}
+                  </a>
+                </div>
+              ))
+            )}
+          </td>
+
+          <td style={td}>{e.status || "pending"}</td>
+
+          <td style={td}>{e.createdBy || e.preparedBy || "—"}</td>
+
+          <td style={td}>
+            <button onClick={() => navigate(`/journal/${e.id}`)}>View</button>
+            {e.status === "pending" && (
+              <>
+                <button onClick={() => handleApprove(e)}>Approve</button>{" "}
+                <button onClick={() => handleReject(e)}>Reject</button>
+              </>
+            )}
+          </td>
+        </tr>
+      );
+    }),
+    [filteredEntries, navigate]
   );
 
   return (
@@ -432,6 +463,7 @@ function ManagerDashboard() {
                   <th style={th}>Description</th>
                   <th style={th}>Debits</th>
                   <th style={th}>Credits</th>
+                  <th style={th}>Attachments</th>
                   <th style={th}>Status</th>
                   <th style={th}>Prepared By</th>
                   <th style={th}>Actions</th>

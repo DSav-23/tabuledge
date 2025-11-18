@@ -61,6 +61,10 @@ function AccountDetailsPage() {
     alert("✅ Account updated successfully.");
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <div>
       <NavBar
@@ -85,6 +89,12 @@ function AccountDetailsPage() {
                   Go to Ledger
                 </button>
                 <button
+                  onClick={() => navigate(`/event-logs?accountId=${id}`)}
+                  title="View event logs for this account"
+                >
+                  Event Log
+                </button>
+                <button
                   onClick={() => navigate("/accounts")}
                   title="Back to Chart of Accounts"
                 >
@@ -101,6 +111,12 @@ function AccountDetailsPage() {
                   title="Send message to manager"
                 >
                   Send Message
+                </button>
+                <button
+                  onClick={handlePrint}
+                  title="Print account details"
+                >
+                  Print
                 </button>
               </div>
             </div>
@@ -227,7 +243,6 @@ function AccountDetailsPage() {
         )}
       </main>
 
-      {/* ✅ Message Modal */}
       <SendEmailModal
         open={showEmailModal}
         onClose={() => setShowEmailModal(false)}

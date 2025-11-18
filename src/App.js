@@ -26,10 +26,14 @@ function App() {
         <Route path="/accounts/:id" element={<AccountDetailsPage />} />
         <Route path="/ledger/:id" element={<LedgerPage />} />
         <Route path="/event-logs" element={<EventLogPage />} />
+
+        {/* Accountant journal page (create + list) */}
         <Route path="/journal" element={<JournalEntryPage />} />
-        <Route path="/journal/:id" element={<JournalEntryPage />} />
-        <Route path="/create-journal" element={<CreateJournalEntry />} />
+
+        {/* Journal entry details (used by PR links, manager, etc.) */}
         <Route path="/journal/:id" element={<JournalEntryDetails />} />
+
+        <Route path="/create-journal" element={<CreateJournalEntry />} />
       </Routes>
     </Router>
   );

@@ -44,6 +44,12 @@ function LedgerPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Filters
+  const [searchTerm, setSearchTerm] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -74,15 +80,53 @@ function LedgerPage() {
     load();
   }, [id]);
 
-  const computed = useMemo(() => {
-    if (!account) return [];
-    const debitNormal = isDebitNormalAccount(account);
-    let run = Number(account.initialBalance || 0);
-    return entries.map((e) => {
-      run = computeNextBalance(debitNormal, run, e.debit, e.credit);
-      return { ...e, runningBalance: run };
+ const computed = useMemo(() => {
+  if (!account) return [];
+
+  // Step 1: apply filters before computing running balances
+  let list = [...entries];
+
+  // Date filtering
+  if (fromDate) {
+    const from = new Date(fromDate);
+    list = list.filter(
+      (e) => (e.date?.toDate ? e.date.toDate() : new Date(0)) >= from
+    );
+  }
+
+  if (toDate) {
+    const to = new Date(toDate);
+    list = list.filter(
+      (e) => (e.date?.toDate ? e.date.toDate() : new Date(0)) <= to
+    );
+  }
+
+  // Search filtering
+  if (searchTerm.trim()) {
+    const st = searchTerm.toLowerCase();
+
+    list = list.filter((e) => {
+      const descMatch = (e.description || "").toLowerCase().includes(st);
+      const byMatch = (e.createdBy || "").toLowerCase().includes(st);
+      const prMatch = (e.journalId || "").toLowerCase().includes(st);
+
+      const amtMatch =
+        String(e.debit || "").includes(st) ||
+        String(e.credit || "").includes(st);
+
+      return descMatch || byMatch || prMatch || amtMatch;
     });
-  }, [entries, account]);
+  }
+
+  // Step 2: recompute running balances based on filtered list
+  const debitNormal = isDebitNormalAccount(account);
+  let run = Number(account.initialBalance || 0);
+
+  return list.map((e) => {
+    run = computeNextBalance(debitNormal, run, e.debit, e.credit);
+    return { ...e, runningBalance: run };
+  });
+}, [entries, fromDate, toDate, searchTerm, account]);
 
   return (
     <div>
@@ -109,6 +153,13 @@ function LedgerPage() {
                 <button onClick={() => navigate(`/accounts/${id}`)} title="View account details">
                   Account Details
                 </button>
+                <button
+                 onClick={() => navigate(`/event-log?accountId=${id}`)}
+                 title="View event logs for this account"
+               >
+                 Event Log
+              </button>
+
                 <button onClick={() => navigate("/accounts")} title="Back to Chart of Accounts">
                   Back
                 </button>
@@ -128,8 +179,54 @@ function LedgerPage() {
               </div>
             </div>
 
+            {/* === Ledger Filters === */}
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                flexWrap: "wrap",
+                alignItems: "center",
+                background: "#f8fafc",
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1px solid #e2e8f0",
+                marginBottom: 16,
+              }}
+            >
+              <div>
+              <label>From: </label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                style={{ padding: 6, border: "1px solid #cbd5e1", borderRadius: 4 }}
+              />
+            </div>
+
+            <div>
+              <label>To: </label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                style={{ padding: 6, border: "1px solid #cbd5e1", borderRadius: 4 }}
+              />
+            </div>
+
+              <div style={{ flexGrow: 1 }}>
+              <input
+                type="text"
+                placeholder="Search description, amount, journal ID, enteredBy"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ width: "100%", padding: 6, border: "1px solid #cbd5e1", borderRadius: 4 }}
+              />
+            </div>
+          </div>
+
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
+
                 <thead>
                   <tr>
                     <th style={th}>Date</th>
