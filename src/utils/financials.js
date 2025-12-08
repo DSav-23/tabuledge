@@ -1,29 +1,43 @@
 // src/utils/financials.js
 import { Timestamp } from "firebase/firestore";
 
-/** True if account's normal balance is debit (Assets, Expenses, or explicitly set) */
+/**
+ * Normalize Firestore account format → expected fields.
+ */
+export function normalizeAccount(a) {
+  const type = (a.category || "").toLowerCase();
+  return {
+    ...a,
+    type,
+    number: String(a.number || ""),
+  };
+}
+
+/** True if account's normal balance is debit (Assets, Expenses, or normalSide=Debit) */
 export function isDebitNormal(account) {
   const side = (account?.normalSide || "").toLowerCase();
   if (side === "debit") return true;
   if (side === "credit") return false;
-  const cat = account?.category;
-  return cat === "Asset" || cat === "Expense";
+
+  const cat = (account?.category || "").toLowerCase();
+  return cat === "asset" || cat === "expense";
 }
 
-/** Normalize the range to JS times; open-ended allowed */
+/** Normalize date range for filtering */
 export function normalizeRange(from, to) {
   const fromMs = from ? new Date(from).getTime() : -Infinity;
-  const toMs   = to   ? new Date(to).getTime()   : +Infinity;
+  const toMs = to ? new Date(to).getTime() : +Infinity;
   return { fromMs, toMs };
 }
 
 /**
- * Build a map of per-account activity & end balance for a date range.
- * - Accounts: [{id, name, number, category, subcategory, normalSide, initialBalance}]
- * - Ledger entries: [{accountId, debit, credit, createdAt(Timestamp)|date(Timestamp)}]
+ * Build account balances for a date range.
  */
 export function computeBalances(accounts, ledgerEntries, from, to) {
   const { fromMs, toMs } = normalizeRange(from, to);
+
+  accounts = accounts.map(normalizeAccount);
+
   const accMap = new Map();
   accounts.forEach(a => {
     accMap.set(a.id, {
@@ -35,31 +49,142 @@ export function computeBalances(accounts, ledgerEntries, from, to) {
     });
   });
 
+  
   const pickWhen = (e) => {
-    const t = e.date?.toDate?.() || e.createdAt?.toDate?.() || null;
-    return t ? t.getTime() : null;
+    // Firestore Timestamp
+    const ts = e.date?.toDate?.() || e.createdAt?.toDate?.();
+    if (ts) return ts.getTime();
+
+    // String-based date
+    if (typeof e.date === "string") {
+      const parsed = new Date(e.date);
+      if (!isNaN(parsed)) return parsed.getTime();
+    }
+    if (typeof e.createdAt === "string") {
+      const parsed = new Date(e.createdAt);
+      if (!isNaN(parsed)) return parsed.getTime();
+    }
+
+    // Fallback — treat as earliest
+    return 0;
   };
 
   for (const e of ledgerEntries) {
     const when = pickWhen(e);
+
     if (when == null || when < fromMs || when > toMs) continue;
+
     const rec = accMap.get(e.accountId);
     if (!rec) continue;
+
     const d = Number(e.debit || 0);
     const c = Number(e.credit || 0);
+
     rec.debitTotal += d;
     rec.creditTotal += c;
 
     const debitNormal = isDebitNormal(rec.account);
-    rec.end = debitNormal
-      ? rec.end + d - c
-      : rec.end + c - d;
+    rec.end = debitNormal ? rec.end + d - c : rec.end + c - d;
   }
 
-  return accMap; // Map<accountId, {account, debitTotal, creditTotal, begin, end}>
+  return accMap;
 }
 
-/** Trial balance rows: {account, debit, credit} where debit/credit are column values */
+/**
+ * Income statement totals (Revenue – Expenses)
+ */
+export function incomeStatement(accMap) {
+  let revenue = 0, expenses = 0;
+
+  for (const { account, end } of accMap.values()) {
+    const cat = (account.category || "").toLowerCase();
+    const n = Number(end || 0);
+
+    if (cat === "revenue") revenue += n;
+    if (cat === "expense") expenses += n;
+  }
+
+  const netIncome = revenue - expenses;
+  return { revenue, expenses, netIncome };
+}
+
+
+export function balanceSheet(accMap, retainedEarningsOpening = 0, periodNetIncome = 0) {
+  let currentAssets = 0;
+  let inventory = 0;
+  let currentLiabilities = 0;
+
+  let totalAssets = 0;
+  let totalLiabilities = 0;
+  let equity = 0;
+
+  for (const { account, end } of accMap.values()) {
+    const amount = Number(end || 0);
+    const cat = (account.category || "").toLowerCase();
+    const sub = (account.subcategory || "").toLowerCase();
+
+    // ASSETS
+    if (cat === "asset") {
+      totalAssets += amount;
+      currentAssets += amount;
+
+      // Detect inventory by label
+      if (sub.includes("inventory")) {
+        inventory += amount;
+      }
+    }
+
+    // LIABILITIES
+    else if (cat === "liability") {
+      totalLiabilities += amount;
+      currentLiabilities += amount;
+    }
+
+    // EQUITY
+    else if (cat === "equity") {
+      equity += amount;
+    }
+  }
+
+  const retainedEarnings =
+    Number(retainedEarningsOpening || 0) + Number(periodNetIncome || 0);
+
+  const totalEquity = equity + retainedEarnings;
+
+  return {
+    currentAssets,
+    inventory,
+    currentLiabilities,
+    totalLiabilities,
+    totalAssets,
+    totalEquity,
+  };
+}
+
+/**
+ * Retained earnings statement
+ */
+export function retainedEarningsStatement(opening, netIncome, dividends = 0) {
+  const ending =
+    Number(opening || 0) + Number(netIncome || 0) - Number(dividends || 0);
+
+  return {
+    opening: Number(opening || 0),
+    netIncome: Number(netIncome || 0),
+    dividends: Number(dividends || 0),
+    ending,
+  };
+}
+
+/**
+ * Timestamp-safe serializer
+ */
+export function serializeReport(obj) {
+  const replacer = (_k, v) =>
+    v instanceof Timestamp ? v.toDate().toISOString() : v;
+  return JSON.parse(JSON.stringify(obj, replacer));
+}
+
 export function trialBalanceRows(accMap) {
   const rows = [];
   let totalD = 0, totalC = 0;
@@ -67,51 +192,14 @@ export function trialBalanceRows(accMap) {
   for (const { account, end } of accMap.values()) {
     const debitNormal = isDebitNormal(account);
     const val = Number(end || 0);
+
     const debit = debitNormal ? Math.max(val, 0) : Math.max(-val, 0);
     const credit = debitNormal ? Math.max(-val, 0) : Math.max(val, 0);
+
     rows.push({ account, debit, credit });
     totalD += debit;
     totalC += credit;
   }
+
   return { rows, totalD, totalC };
-}
-
-/** Income statement: sum by Revenue/Expense */
-export function incomeStatement(accMap) {
-  let revenue = 0, expenses = 0;
-  for (const { account, end } of accMap.values()) {
-    const cat = account.category;
-    if (cat === "Revenue") revenue += Number(end || 0);
-    if (cat === "Expense") expenses += Number(end || 0);
-  }
-  const netIncome = revenue - expenses;
-  return { revenue, expenses, netIncome };
-}
-
-/** Balance sheet buckets & retained earnings */
-export function balanceSheet(accMap, retainedEarningsOpening = 0, periodNetIncome = 0) {
-  const buckets = { assets: 0, liabilities: 0, equity: 0 };
-  for (const { account, end } of accMap.values()) {
-    const cat = account.category;
-    const n = Number(end || 0);
-    if (cat === "Asset") buckets.assets += n;
-    if (cat === "Liability") buckets.liabilities += n;
-    if (cat === "Equity") buckets.equity += n;
-  }
-  // Add retained earnings into equity (opening + period NI)
-  const retainedEarnings = Number(retainedEarningsOpening || 0) + Number(periodNetIncome || 0);
-  const equityTotal = buckets.equity + retainedEarnings;
-  return { ...buckets, retainedEarnings, equityTotal };
-}
-
-/** Retained earnings statement */
-export function retainedEarningsStatement(opening, netIncome, dividends = 0) {
-  const ending = Number(opening || 0) + Number(netIncome || 0) - Number(dividends || 0);
-  return { opening: Number(opening || 0), netIncome: Number(netIncome || 0), dividends: Number(dividends || 0), ending };
-}
-
-/** Convenience: serialize a Timestamp-safe report payload */
-export function serializeReport(obj) {
-  const replacer = (_k, v) => (v instanceof Timestamp ? v.toDate().toISOString() : v);
-  return JSON.parse(JSON.stringify(obj, replacer));
 }

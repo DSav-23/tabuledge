@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import logo from "../assets/tabuledge-logo.png";
+import useUserRole from "../hooks/useUserRole";
 
 function NavBar({
   userEmail,
@@ -14,6 +15,7 @@ function NavBar({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { role } = useUserRole();
 
   const handleLogout = async () => {
     try {
@@ -29,9 +31,22 @@ function NavBar({
     if (location.pathname !== path) navigate(path);
   };
 
+  // ------------------------------------------------------------------
+  // HOME BEHAVIOR: always go to the Landing Dashboard with ratios
+  // This ensures all users see the financial ratios/dashboard page.
+  // ------------------------------------------------------------------
+  const goHome = () => {
+    go("/dashboard");
+  };
+
   return (
     <header style={styles.header}>
-      <div style={styles.leftGroup} onClick={() => go("/accounts")} title="Go to Chart of Accounts">
+      {/* Logo + brand */}
+      <div
+        style={styles.leftGroup}
+        onClick={goHome}
+        title="Go to Dashboard"
+      >
         {/* Make the logo white using a CSS filter to blend with dark theme */}
         <img src={logo} alt="Tabuledge" style={styles.logoWhite} />
         <div style={styles.brandBlock}>
@@ -59,24 +74,60 @@ function NavBar({
           </span>
         )}
 
-        {/* Top navigation buttons */}
+        {/* Top navigation buttons (role-based access) */}
         {showNav && (
           <nav style={styles.nav}>
-            <button onClick={() => go("/admin")} title="Admin home" style={styles.btn}>
-              Admin
-            </button>
-            <button onClick={() => go("/accounts")} title="Chart of Accounts" style={styles.btn}>
-              Chart of Accounts
-            </button>
-            <button onClick={() => go("/accountant")} title="Journalizing & posting" style={styles.btn}>
-              Journal
-            </button>
-            <button onClick={() => go("/manager")} title="Reports & approvals" style={styles.btn}>
-              Reports
-            </button>
-            <button onClick={() => go("/event-logs")} title="System change history" style={styles.btn}>
-              Event Logs
-            </button>
+            {role === "admin" && (
+              <button
+                onClick={() => go("/admin")}
+                title="Admin home"
+                style={styles.btn}
+              >
+                Admin
+              </button>
+            )}
+
+            {(role === "admin" ||
+              role === "manager" ||
+              role === "accountant") && (
+              <button
+                onClick={() => go("/accounts")}
+                title="Chart of Accounts"
+                style={styles.btn}
+              >
+                Chart of Accounts
+              </button>
+            )}
+
+            {(role === "admin" || role === "accountant") && (
+              <button
+                onClick={() => go("/accountant")}
+                title="Journalizing & posting"
+                style={styles.btn}
+              >
+                Journal
+              </button>
+            )}
+
+            {(role === "admin" || role === "manager") && (
+              <button
+                onClick={() => go("/manager")}
+                title="Reports & approvals"
+                style={styles.btn}
+              >
+                Reports
+              </button>
+            )}
+
+            {(role === "admin" || role === "manager") && (
+              <button
+                onClick={() => go("/event-logs")}
+                title="System change history"
+                style={styles.btn}
+              >
+                Event Logs
+              </button>
+            )}
           </nav>
         )}
 
