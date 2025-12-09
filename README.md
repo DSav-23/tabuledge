@@ -217,4 +217,4 @@ You can now login and view the project
 
 **Made with joy by the Tabuledge Development Team**
 
-**Happy Accounting! **
+**Happy Accounting!**
