@@ -1,4 +1,14 @@
-// src/pages/LedgerPage.js
+/**
+ * @fileoverview LedgerPage Page
+ * @description 
+ * 
+ * @module pages/LedgerPage
+ * @requires react
+ * 
+ * @author Tabuledge Development Team
+ * @version 1.0.0
+ */
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { db, auth } from "../firebase";

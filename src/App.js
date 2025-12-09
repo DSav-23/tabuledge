@@ -2,6 +2,7 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import AdminPanel from "./pages/AdminPanel";
 import ManagerDashboard from "./pages/ManagerDashboard";
 import AccountantDashboard from "./pages/AccountantDashboard";
@@ -12,7 +13,7 @@ import EventLogPage from "./pages/EventLogPage";
 import JournalEntryPage from "./pages/JournalEntryPage";
 import CreateJournalEntry from "./pages/CreateJournalEntry";
 import JournalEntryDetails from "./pages/JournalEntryDetails";
-import LandingDashboard from "./pages/LandingDashboard"; // ⬅️ from file 1
+import LandingDashboard from "./pages/LandingDashboard";
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
         {/* Auth */}
         <Route path="/" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
         {/* Admin / Manager / Accountant */}
         <Route path="/admin" element={<AdminPanel />} />
@@ -42,7 +44,7 @@ function App() {
         {/* Dedicated create-journal page (if you still use it) */}
         <Route path="/create-journal" element={<CreateJournalEntry />} />
 
-        {/* Optional landing/dashboard page */}
+        {/* Landing/dashboard page with financial ratios */}
         <Route path="/dashboard" element={<LandingDashboard />} />
       </Routes>
     </Router>

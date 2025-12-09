@@ -1,4 +1,14 @@
-// src/pages/ManagerDashboard.js
+/**
+ * @fileoverview ManagerDashboard Page
+ * 
+ * 
+ * @module pages/ManagerDashboard
+ * @requires react
+ * 
+ * @author Tabuledge Development Team
+ * @version 1.0.0
+ */
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
   collection, getDocs, doc, updateDoc, addDoc,
@@ -382,7 +392,7 @@ function ManagerDashboard() {
     <div>
       <NavBar userEmail={userEmail} selectedDate={selectedDate} onDateChange={setSelectedDate} />
       <main style={{ padding: "20px" }}>
-        <h2>Manager Dashboard</h2>
+        <h2>Reports</h2>
 
         {/* ===== Reports ===== */}
         <section style={card}>

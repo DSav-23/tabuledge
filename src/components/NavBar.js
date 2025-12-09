@@ -1,4 +1,20 @@
-// src/components/NavBar.js
+/**
+ * @fileoverview Navigation Bar Component
+ * @description Primary navigation header for the Tabuledge accounting application.
+ * Provides role-based menu access, user authentication display, and global navigation.
+ * 
+ * @module components/NavBar
+ * @requires react
+ * @requires react-router-dom
+ * @requires firebase/auth
+ * @requires ../firebase
+ * @requires ../assets/tabuledge-logo.png
+ * @requires ../hooks/useUserRole
+ * 
+ * @author Tabuledge Development Team
+ * @version 1.0.0
+ */
+
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { signOut } from "firebase/auth";
@@ -6,17 +22,63 @@ import { auth } from "../firebase";
 import logo from "../assets/tabuledge-logo.png";
 import useUserRole from "../hooks/useUserRole";
 
+/**
+ * NavBar Component
+ * 
+ * @component
+ * @description Renders the application's main navigation bar with role-based menu items,
+ * user authentication status, date picker, and logout functionality.
+ * 
+ * Features:
+ * - Role-based navigation (Admin, Manager, Accountant)
+ * - Active page highlighting
+ * - User avatar with initials
+ * - Date selection
+ * - Logout functionality
+ * 
+ * @param {Object} props - Component props
+ * @param {string} props.userEmail - Currently authenticated user's email address
+ * @param {string} props.selectedDate - Currently selected date in YYYY-MM-DD format
+ * @param {Function} props.onDateChange - Callback function when date changes
+ * @param {boolean} [props.showNav=true] - Whether to display navigation menu
+ * @param {boolean} [props.showLogout=true] - Whether to display logout button
+ * 
+ * @returns {JSX.Element} Rendered navigation bar
+ * 
+ * @example
+ * <NavBar 
+ *   userEmail="user@example.com"
+ *   selectedDate="2025-12-09"
+ *   onDateChange={(date) => console.log(date)}
+ *   showNav={true}
+ *   showLogout={true}
+ * />
+ */
 function NavBar({
   userEmail,
   selectedDate,
   onDateChange,
-  showNav = true,      // set to false on pages like Login/Register
-  showLogout = true,   // set to false on pages like Login/Register
+  showNav = true,
+  showLogout = true,
 }) {
+  // ==================== Hooks ====================
   const navigate = useNavigate();
   const location = useLocation();
   const { role } = useUserRole();
 
+  // ==================== Event Handlers ====================
+  
+  /**
+   * Handles user logout
+   * 
+   * @async
+   * @function handleLogout
+   * @description Signs out the user via Firebase Auth and redirects to login page.
+   * Displays alert on error.
+   * 
+   * @returns {Promise<void>}
+   * @throws {Error} If Firebase signOut fails
+   */
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -27,36 +89,56 @@ function NavBar({
     }
   };
 
+  /**
+   * Navigates to specified path if not already there
+   * 
+   * @function go
+   * @param {string} path - Target route path
+   * @returns {void}
+   */
   const go = (path) => {
     if (location.pathname !== path) navigate(path);
   };
 
-  // ------------------------------------------------------------------
-  // HOME BEHAVIOR: always go to the Landing Dashboard with ratios
-  // This ensures all users see the financial ratios/dashboard page.
-  // ------------------------------------------------------------------
+  /**
+   * Navigates to dashboard home page
+   * 
+   * @function goHome
+   * @returns {void}
+   */
   const goHome = () => {
     go("/dashboard");
   };
 
+  /**
+   * Checks if given path matches current location
+   * 
+   * @function isActive
+   * @param {string} path - Path to check against current location
+   * @returns {boolean} True if path is currently active
+   */
+  const isActive = (path) => location.pathname === path;
+
+  // ==================== Render ====================
+  
   return (
     <header style={styles.header}>
-      {/* Logo + brand */}
+      {/* ==================== Left Section: Logo & Brand ==================== */}
       <div
         style={styles.leftGroup}
         onClick={goHome}
         title="Go to Dashboard"
       >
-        {/* Make the logo white using a CSS filter to blend with dark theme */}
         <img src={logo} alt="Tabuledge" style={styles.logoWhite} />
         <div style={styles.brandBlock}>
           <div style={styles.brand}>TABULEDGE</div>
-          <div style={styles.subbrand}>ACCOUNTING SOFTWARE</div>
         </div>
       </div>
 
+      {/* ==================== Right Section: Date, Nav, User, Logout ==================== */}
       <div style={styles.rightGroup}>
-        {/* Date picker (pop-up calendar) */}
+        
+        {/* Date Picker */}
         {onDateChange && (
           <input
             type="date"
@@ -67,63 +149,60 @@ function NavBar({
           />
         )}
 
-        {/* Signed-in user */}
-        {userEmail && (
-          <span title="Signed-in user" style={styles.user}>
-            {userEmail}
-          </span>
-        )}
-
-        {/* Top navigation buttons (role-based access) */}
+        {/* ==================== Navigation Menu (Role-Based) ==================== */}
         {showNav && (
           <nav style={styles.nav}>
+            
+            {/* Admin Menu Item */}
             {role === "admin" && (
               <button
                 onClick={() => go("/admin")}
                 title="Admin home"
-                style={styles.btn}
+                style={isActive("/admin") ? { ...styles.navBtn, ...styles.navBtnActive } : styles.navBtn}
               >
                 Admin
               </button>
             )}
 
-            {(role === "admin" ||
-              role === "manager" ||
-              role === "accountant") && (
+            {/* Chart of Accounts - Available to Admin, Manager, Accountant */}
+            {(role === "admin" || role === "manager" || role === "accountant") && (
               <button
                 onClick={() => go("/accounts")}
                 title="Chart of Accounts"
-                style={styles.btn}
+                style={isActive("/accounts") ? { ...styles.navBtn, ...styles.navBtnActive } : styles.navBtn}
               >
                 Chart of Accounts
               </button>
             )}
 
+            {/* Journal - Available to Admin and Accountant */}
             {(role === "admin" || role === "accountant") && (
               <button
                 onClick={() => go("/accountant")}
                 title="Journalizing & posting"
-                style={styles.btn}
+                style={isActive("/accountant") ? { ...styles.navBtn, ...styles.navBtnActive } : styles.navBtn}
               >
                 Journal
               </button>
             )}
 
+            {/* Reports - Available to Admin and Manager */}
             {(role === "admin" || role === "manager") && (
               <button
                 onClick={() => go("/manager")}
                 title="Reports & approvals"
-                style={styles.btn}
+                style={isActive("/manager") ? { ...styles.navBtn, ...styles.navBtnActive } : styles.navBtn}
               >
                 Reports
               </button>
             )}
 
-            {(role === "admin" || role === "manager") && (
+            {/* Event Logs - Available to Admin, Manager, and Accountant */}
+            {(role === "admin" || role === "manager" || role === "accountant") && (
               <button
                 onClick={() => go("/event-logs")}
                 title="System change history"
-                style={styles.btn}
+                style={isActive("/event-logs") ? { ...styles.navBtn, ...styles.navBtnActive } : styles.navBtn}
               >
                 Event Logs
               </button>
@@ -131,12 +210,24 @@ function NavBar({
           </nav>
         )}
 
-        {/* Logout */}
+        {/* ==================== User Display ==================== */}
+        {userEmail && (
+          <div style={styles.userBox}>
+            {/* User Avatar with Initial */}
+            <div style={styles.userAvatar}>
+              {userEmail.charAt(0).toUpperCase()}
+            </div>
+            {/* User Email */}
+            <span style={styles.userEmail}>{userEmail}</span>
+          </div>
+        )}
+
+        {/* ==================== Logout Button ==================== */}
         {showLogout && (
           <button
             onClick={handleLogout}
             title="Sign out"
-            style={{ ...styles.btn, ...styles.logout }}
+            style={styles.logout}
           >
             Logout
           </button>
@@ -146,7 +237,15 @@ function NavBar({
   );
 }
 
+// ==================== Styles ====================
+
+/**
+ * Component styles object
+ * @constant {Object} styles
+ * @description CSS-in-JS styles for NavBar component following Material Design principles
+ */
 const styles = {
+  /** Main header container - sticky positioned dark gradient */
   header: {
     display: "flex",
     justifyContent: "space-between",
@@ -159,31 +258,176 @@ const styles = {
     zIndex: 100,
     borderBottom: "1px solid rgba(255,255,255,0.08)",
   },
-  leftGroup: { display: "flex", alignItems: "center", gap: 10, cursor: "pointer" },
-  // Turn dark logo to white: brightness(0) makes it black, invert(1) flips to white.
-  logoWhite: { width: 40, height: 40, objectFit: "contain", filter: "brightness(0) invert(1)" },
-  brandBlock: { display: "flex", flexDirection: "column", lineHeight: 1 },
-  brand: { fontWeight: 800, letterSpacing: 2, fontSize: 14 },
-  subbrand: { fontSize: 10, opacity: 0.8, letterSpacing: 1.5 },
-  rightGroup: { display: "flex", alignItems: "center", gap: 8 },
+  
+  /** Left group container - logo and brand */
+  leftGroup: { 
+    display: "flex", 
+    alignItems: "center", 
+    gap: 10, 
+    cursor: "pointer" 
+  },
+  
+  /** Logo image - inverted to white for dark background */
+  logoWhite: { 
+    width: 40, 
+    height: 40, 
+    objectFit: "contain", 
+    filter: "brightness(0) invert(1)" 
+  },
+  
+  /** Brand text container */
+  brandBlock: { 
+    display: "flex", 
+    flexDirection: "column", 
+    lineHeight: 1 
+  },
+  
+  /** Main brand text "TABULEDGE" */
+  brand: { 
+    fontWeight: 800, 
+    letterSpacing: 2, 
+    fontSize: 14 
+  },
+  
+  /** Right group container - date, nav, user, logout */
+  rightGroup: { 
+    display: "flex", 
+    alignItems: "center", 
+    gap: 12 
+  },
+  
+  /** Date picker input - modern styled */
   date: {
-    padding: "4px 8px",
-    borderRadius: 6,
-    border: "1px solid #334155",
-    background: "#0b1220",
-    color: "#fff",
-  },
-  user: { fontSize: 12, opacity: 0.9, marginLeft: 6, marginRight: 2 },
-  nav: { display: "flex", gap: 8, alignItems: "center" },
-  btn: {
     padding: "8px 12px",
-    background: "#1e293b",
-    color: "#fff",
-    border: "1px solid #334155",
     borderRadius: 8,
+    border: "1px solid #475569",
+    background: "rgba(30, 41, 59, 0.6)",
+    color: "#fff",
+    fontSize: "13px",
     cursor: "pointer",
+    transition: "all 0.2s ease",
+    outline: "none",
   },
-  logout: { background: "#7f1d1d", borderColor: "#7f1d1d" },
+  
+  /** User info box with pill-shaped border */
+  userBox: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "3px 10px",
+    background: "#1e293b",
+    border: "1px solid #334155",
+    borderRadius: 50, // Pill/ellipse shape
+    height: "28px",
+  },
+  
+  /** Circular avatar with user initial */
+  userAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: "50%",
+    background: "#3b82f6",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 10,
+    fontWeight: 700,
+    color: "#fff",
+  },
+  
+  /** User email text */
+  userEmail: { 
+    fontSize: 11.5, 
+    opacity: 0.95,
+    fontWeight: 500,
+    lineHeight: 1,
+  },
+  
+  /** Navigation container */
+  nav: { 
+    display: "flex", 
+    gap: 4, 
+    alignItems: "center" 
+  },
+  
+  /** Navigation button base style - transparent with hover/active states */
+  navBtn: {
+    padding: "8px 14px",
+    background: "transparent",
+    color: "rgba(255, 255, 255, 0.7)",
+    border: "none",
+    borderRadius: 6,
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: 500,
+    transition: "all 0.2s ease",
+    position: "relative",
+  },
+  
+  /** Active navigation button - highlighted with blue background */
+  navBtnActive: {
+    color: "#fff",
+    background: "rgba(59, 130, 246, 0.15)",
+    fontWeight: 600,
+  },
+  
+  /** Logout button - red themed with border */
+  logout: { 
+    padding: "8px 16px",
+    background: "#7f1d1d", 
+    borderColor: "#991b1b",
+    border: "1px solid #991b1b",
+    borderRadius: 8,
+    color: "#fff",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: 600,
+    height: "36px",
+    transition: "all 0.2s ease",
+  },
 };
+
+// ==================== Dynamic Styles ====================
+
+/**
+ * Injects hover and focus styles into document head
+ * @description Adds CSS for interactive states that can't be defined inline
+ * Runs only in browser environment
+ */
+if (typeof document !== "undefined") {
+  const style = document.createElement("style");
+  style.textContent = `
+    /* Button hover effects */
+    header button:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+    
+    /* Date input hover state */
+    header input[type="date"]:hover {
+      border-color: #64748b;
+      background: rgba(30, 41, 59, 0.8);
+    }
+    
+    /* Date input focus state */
+    header input[type="date"]:focus {
+      border-color: #3b82f6;
+      background: rgba(30, 41, 59, 0.9);
+    }
+    
+    /* Calendar picker icon styling */
+    header input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+      cursor: pointer;
+      opacity: 0.8;
+    }
+    
+    /* Calendar picker hover */
+    header input[type="date"]::-webkit-calendar-picker-indicator:hover {
+      opacity: 1;
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 export default NavBar;

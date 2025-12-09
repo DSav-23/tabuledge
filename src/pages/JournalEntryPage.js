@@ -1,9 +1,22 @@
-// src/pages/JournalEntryPage.js
+/**
+ * @fileoverview JournalEntryPage Page
+ * 
+ * 
+ * @module pages/JournalEntryPage
+ * @requires react
+ * 
+ * @author Tabuledge Development Team
+ * @version 1.0.0
+ */
+
+// Enhanced version with support for Regular vs Adjusting journal entries
+// Sprint 4 requirement: distinguish adjusting entries from regular entries
+
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, addDoc, getDocs, query, where, orderBy, serverTimestamp,
-} from "firebase/firestore";
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { auth, db, storage } from "../firebase";
+import ErrorDisplay from "../components/ErrorDisplay";
 
 const ALLOWED_TYPES = [
   "application/pdf",
@@ -30,6 +43,9 @@ function formatMoney(n) {
 export default function JournalEntryPage() {
   const user = auth.currentUser;
   const [accounts, setAccounts] = useState([]);
+  
+  // Form state
+  const [entryType, setEntryType] = useState("regular"); // NEW: regular or adjusting
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [description, setDescription] = useState("");
   const [debits, setDebits] = useState([{ accountId: "", amount: "" }]);
@@ -38,14 +54,15 @@ export default function JournalEntryPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // list view state
+  // List view state
   const [entries, setEntries] = useState([]);
-  const [statusFilter, setStatusFilter] = useState("all"); // all | pending | approved | rejected
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all"); // NEW: all, regular, adjusting
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Load accounts for dropdowns
+  // Load accounts
   useEffect(() => {
     const load = async () => {
       const snap = await getDocs(collection(db, "accounts"));
@@ -58,55 +75,44 @@ export default function JournalEntryPage() {
     if (!s) return "pending";
     s = s.toLowerCase();
     if (["approved", "rejected", "pending"].includes(s)) return s;
-
-    // Map old synonyms to Sprint-approved values
     if (s === "pendingapproval" || s === "submitted") return "pending";
-
-    return "pending"; // default fallback
+    return "pending";
   };
 
   const normalizeDate = (entry) => {
-  // 1. Prefer explicit "date" field from JournalEntryPage
     if (entry.date) return entry.date;
-
-  // 2. Fallback: convert Firestore createdAt to yyyy-mm-dd
     if (entry.createdAt?.toDate) {
       return entry.createdAt.toDate().toISOString().slice(0, 10);
-  }
+    }
+    return "";
+  };
 
-  // 3. As a last fallback
-  return "";
-};
-
-
-  // Load the current user's journal entries (and others, accountant should be able to view all entries)
+  // Load entries
   useEffect(() => {
     const loadEntries = async () => {
-      
       const q = query(collection(db, "journalEntries"), orderBy("createdAt", "desc"));
       const snap = await getDocs(q);
       setEntries(
         snap.docs.map(d => {
           const data = d.data();
-           return {
-             id: d.id,
-              ...data,
-              status: normalizeStatus(data.status), 
-              filterDate: normalizeDate(data),
-           };
-         })
-     );
-  };
-
-   loadEntries();
-}, []);
-    
- 
+          return {
+            id: d.id,
+            ...data,
+            status: normalizeStatus(data.status),
+            type: data.type || "regular", // Default to regular if not set
+            filterDate: normalizeDate(data),
+          };
+        })
+      );
+    };
+    loadEntries();
+  }, []);
 
   const totalDebits = useMemo(
     () => debits.reduce((s, r) => s + moneyToNumber(r.amount), 0),
     [debits]
   );
+  
   const totalCredits = useMemo(
     () => credits.reduce((s, r) => s + moneyToNumber(r.amount), 0),
     [credits]
@@ -116,6 +122,7 @@ export default function JournalEntryPage() {
     const next = debits.map((r, i) => (i === idx ? { ...r, [key]: val } : r));
     setDebits(next);
   };
+  
   const onChangeCredit = (idx, key, val) => {
     const next = credits.map((r, i) => (i === idx ? { ...r, [key]: val } : r));
     setCredits(next);
@@ -127,6 +134,7 @@ export default function JournalEntryPage() {
   const removeCredit = (idx) => setCredits(credits.filter((_, i) => i !== idx));
 
   const resetForm = () => {
+    setEntryType("regular");
     setDate(new Date().toISOString().slice(0, 10));
     setDescription("");
     setDebits([{ accountId: "", amount: "" }]);
@@ -136,26 +144,26 @@ export default function JournalEntryPage() {
   };
 
   const validate = () => {
-    // At least one debit and one credit
     if (debits.length === 0 || credits.length === 0) {
       return "Each journal entry must have at least one debit and one credit.";
     }
-    // All lines must have an account and positive amount
+    
     for (const r of [...debits, ...credits]) {
       if (!r.accountId) return "All lines must have an account selected.";
       const amt = moneyToNumber(r.amount);
       if (!amt || amt <= 0) return "All line amounts must be greater than zero.";
     }
-    // Must balance
+    
     if (Math.abs(totalDebits - totalCredits) > 0.0001) {
       return "Total debits must equal total credits.";
     }
-    // Files must be allowed types
+    
     for (const f of files) {
       if (!ALLOWED_TYPES.includes(f.type)) {
         return `Unsupported file type: ${f.name}`;
       }
     }
+    
     return "";
   };
 
@@ -163,10 +171,9 @@ export default function JournalEntryPage() {
     e.preventDefault();
     setError("");
     const v = validate();
+    
     if (v) {
       setError(v);
-      // Ensure an error “record” exists in Firestore per requirements
-      // Stores the message used, who saw it, and when
       await addDoc(collection(db, "errorMessages"), {
         code: "JE_VALIDATION",
         message: v,
@@ -179,7 +186,7 @@ export default function JournalEntryPage() {
     try {
       setSubmitting(true);
 
-      // Upload attachments (if any)
+      // Upload attachments
       const uploads = [];
       for (const f of files) {
         const storageRef = ref(storage, `journal_attachments/${Date.now()}_${f.name}`);
@@ -188,7 +195,7 @@ export default function JournalEntryPage() {
         uploads.push({ name: f.name, url, contentType: f.type, size: f.size });
       }
 
-      // Resolve account metadata for lines
+      // Resolve account metadata
       const accountLookup = Object.fromEntries(accounts.map(a => [a.id, a]));
       const debitLines = debits.map(r => ({
         accountId: r.accountId,
@@ -203,8 +210,9 @@ export default function JournalEntryPage() {
         side: "credit",
       }));
 
-      // Create journal entry (status pending)
+      // Create journal entry
       const docRef = await addDoc(collection(db, "journalEntries"), {
+        type: entryType, // NEW: regular or adjusting
         date,
         description,
         lines: [...debitLines, ...creditLines],
@@ -216,64 +224,103 @@ export default function JournalEntryPage() {
         createdAt: serverTimestamp(),
       });
 
-      // Manager notification stub (can be expanded later)
+      // Notification for manager
       await addDoc(collection(db, "notifications"), {
-        type: "journal_submitted",
+        type: entryType === "adjusting" ? "adjusting_journal_submitted" : "journal_submitted",
         journalId: docRef.id,
         forRole: "manager",
-        createdBy: user?.email || "unknown",
+        message: `New ${entryType} journal entry submitted by ${user?.email}`,
         createdAt: serverTimestamp(),
       });
 
+      alert(`✅ ${entryType === "adjusting" ? "Adjusting" : "Regular"} journal entry submitted for approval!`);
       resetForm();
-      alert("Journal entry submitted for approval.");
+
+      // Reload entries
+      const q = query(collection(db, "journalEntries"), orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+      setEntries(
+        snap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            status: normalizeStatus(data.status),
+            type: data.type || "regular",
+            filterDate: normalizeDate(data),
+          };
+        })
+      );
     } catch (err) {
-      console.error(err);
-      setError("An unexpected error occurred while submitting the journal entry.");
-      await addDoc(collection(db, "errorMessages"), {
-        code: "JE_SUBMIT",
-        message: String(err?.message || err),
-        user: user?.email || "unknown",
-        createdAt: serverTimestamp(),
-      });
+      console.error("Submit error:", err);
+      setError("Failed to submit journal entry. Please try again.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Simple client-side filters for list
+  // Filter entries
   const filteredEntries = useMemo(() => {
     return entries.filter((e) => {
       if (statusFilter !== "all" && e.status !== statusFilter) return false;
+      if (typeFilter !== "all" && e.type !== typeFilter) return false; // NEW
       if (fromDate && e.filterDate < fromDate) return false;
       if (toDate && e.filterDate > toDate) return false;
 
       if (searchTerm) {
         const st = searchTerm.toLowerCase();
-
         const inAccounts =
           Array.isArray(e.lines) &&
           e.lines.some(
             ln =>
               (ln.accountName || "").toLowerCase().includes(st) ||
-            (ln.accountNumber || "").toLowerCase?.().includes(st) || 
+              (ln.accountNumber || "").toLowerCase?.().includes(st) ||
               String(ln.amount).includes(st)
           );
         const inDesc = (e.description || "").toLowerCase().includes(st);
-        const inDate =  (e.date || "").includes(st) ||(e.filterDate || "").includes(st);   
+        const inDate = (e.date || "").includes(st) || (e.filterDate || "").includes(st);
         return inAccounts || inDesc || inDate;
-
       }
       return true;
     });
-  }, [entries, statusFilter, fromDate, toDate, searchTerm]);
+  }, [entries, statusFilter, typeFilter, fromDate, toDate, searchTerm]);
 
   return (
     <div style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
       <h2>Journal Entries</h2>
 
       {/* Entry form */}
-      <form onSubmit={handleSubmit} style={{ border: "1px solid #ddd", padding: 16, marginBottom: 24 }}>
+      <form onSubmit={handleSubmit} style={styles.form}>
+        <h3>Create Journal Entry</h3>
+
+        {/* Entry Type Selector - NEW */}
+        <div style={styles.typeSelector}>
+          <label style={styles.typeLabel}>
+            <input
+              type="radio"
+              value="regular"
+              checked={entryType === "regular"}
+              onChange={(e) => setEntryType(e.target.value)}
+            />
+            <span style={styles.typeText}>
+              <strong>Regular Journal Entry</strong>
+              <span style={styles.typeDesc}>Standard business transactions</span>
+            </span>
+          </label>
+          <label style={styles.typeLabel}>
+            <input
+              type="radio"
+              value="adjusting"
+              checked={entryType === "adjusting"}
+              onChange={(e) => setEntryType(e.target.value)}
+            />
+            <span style={styles.typeText}>
+              <strong>Adjusting Journal Entry</strong>
+              <span style={styles.typeDesc}>Period-end adjustments (accruals, deferrals, etc.)</span>
+            </span>
+          </label>
+        </div>
+
         <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
           <div>
             <label>Date</label><br />
@@ -285,7 +332,7 @@ export default function JournalEntryPage() {
               type="text"
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="Optional description"
+              placeholder="Enter description"
               style={{ width: "100%" }}
             />
           </div>
@@ -301,6 +348,7 @@ export default function JournalEntryPage() {
                   value={row.accountId}
                   onChange={e => onChangeDebit(idx, "accountId", e.target.value)}
                   required
+                  style={{ flex: 1 }}
                 >
                   <option value="">Select account</option>
                   {accounts.map(a => (
@@ -334,6 +382,7 @@ export default function JournalEntryPage() {
                   value={row.accountId}
                   onChange={e => onChangeCredit(idx, "accountId", e.target.value)}
                   required
+                  style={{ flex: 1 }}
                 >
                   <option value="">Select account</option>
                   {accounts.map(a => (
@@ -363,35 +412,54 @@ export default function JournalEntryPage() {
           <div>
             <strong>Total Debits:</strong> {formatMoney(totalDebits)} &nbsp; | &nbsp;
             <strong>Total Credits:</strong> {formatMoney(totalCredits)}
+            {Math.abs(totalDebits - totalCredits) < 0.01 && totalDebits > 0 && (
+              <span style={{ marginLeft: 12, color: "#059669" }}>✓ Balanced</span>
+            )}
           </div>
           <div>
-            <input
-              type="file"
-              multiple
-              onChange={e => setFiles(Array.from(e.target.files || []))}
-              accept={ALLOWED_TYPES.join(",")}
-            />
+            <label style={{ fontSize: 13 }}>
+              Attachments:
+              <input
+                type="file"
+                multiple
+                onChange={e => setFiles(Array.from(e.target.files || []))}
+                accept={ALLOWED_TYPES.join(",")}
+                style={{ marginLeft: 8 }}
+              />
+            </label>
           </div>
         </div>
 
-        {error && <p style={{ color: "red", marginTop: 8 }}>{error}</p>}
+        {error && <ErrorDisplay error={error} onDismiss={() => setError("")} />}
 
         <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-          <button type="submit" disabled={submitting}>Submit for approval</button>
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Submitting..." : "Submit for approval"}
+          </button>
           <button type="button" onClick={resetForm}>Reset</button>
         </div>
       </form>
 
-      {/* Journal Entries list (accountant view) */}
-      <div style={{ border: "1px solid #ddd", padding: 16 }}>
+      {/* Journal Entries list */}
+      <div style={styles.listContainer}>
         <h3>All Journal Entries</h3>
-        <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+        
+        {/* Filters - Enhanced with type filter */}
+        <div style={styles.filters}>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
             <option value="all">All statuses</option>
             <option value="pending">Pending</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
           </select>
+          
+          {/* NEW: Type filter */}
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            <option value="all">All types</option>
+            <option value="regular">Regular Entries</option>
+            <option value="adjusting">Adjusting Entries</option>
+          </select>
+          
           <div>
             <label style={{ marginRight: 4 }}>From</label>
             <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
@@ -402,7 +470,7 @@ export default function JournalEntryPage() {
           </div>
           <input
             type="text"
-            placeholder="Search by account name, amount, or description"
+            placeholder="Search by account, amount, or description"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             style={{ flex: 1, minWidth: 260 }}
@@ -413,6 +481,7 @@ export default function JournalEntryPage() {
           <table border="1" cellPadding="8" style={{ borderCollapse: "collapse", width: "100%" }}>
             <thead>
               <tr>
+                <th>Type</th>
                 <th>Date</th>
                 <th>Description</th>
                 <th>Status</th>
@@ -425,8 +494,19 @@ export default function JournalEntryPage() {
               {filteredEntries.map((je) => {
                 const debs = (je.lines || []).filter(l => l.side === "debit");
                 const creds = (je.lines || []).filter(l => l.side === "credit");
+                
+                // Type badge styling
+                const typeBadge = je.type === "adjusting"
+                  ? { background: "#fef3c7", color: "#92400e", padding: "4px 8px", borderRadius: 12, fontSize: 11, fontWeight: 600 }
+                  : { background: "#dbeafe", color: "#1e40af", padding: "4px 8px", borderRadius: 12, fontSize: 11, fontWeight: 600 };
+                
                 return (
                   <tr key={je.id}>
+                    <td>
+                      <span style={typeBadge}>
+                        {je.type === "adjusting" ? "Adjusting" : "Regular"}
+                      </span>
+                    </td>
                     <td>{je.date}</td>
                     <td>{je.description || ""}</td>
                     <td>{je.status}</td>
@@ -453,7 +533,7 @@ export default function JournalEntryPage() {
                 );
               })}
               {filteredEntries.length === 0 && (
-                <tr><td colSpan={6}>No journal entries found.</td></tr>
+                <tr><td colSpan={7}>No journal entries found.</td></tr>
               )}
             </tbody>
           </table>
@@ -461,4 +541,50 @@ export default function JournalEntryPage() {
       </div>
     </div>
   );
-  }
+}
+
+const styles = {
+  form: {
+    border: "1px solid #e2e8f0",
+    padding: 16,
+    marginBottom: 24,
+    borderRadius: 8,
+    background: "#f8fafc",
+  },
+  typeSelector: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+    marginBottom: 16,
+  },
+  typeLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    border: "2px solid #cbd5e1",
+    borderRadius: 8,
+    cursor: "pointer",
+    background: "#fff",
+  },
+  typeText: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+  },
+  typeDesc: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+  listContainer: {
+    border: "1px solid #e2e8f0",
+    padding: 16,
+    borderRadius: 8,
+  },
+  filters: {
+    display: "flex",
+    gap: 8,
+    marginBottom: 12,
+    flexWrap: "wrap",
+  },
+};

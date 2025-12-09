@@ -1,4 +1,14 @@
-// src/pages/AccountDetailsPage.js
+/**
+ * @fileoverview AccountDetailsPage Page
+ * 
+ * 
+ * @module pages/AccountDetailsPage
+ * @requires react
+ * 
+ * @author Tabuledge Development Team
+ * @version 1.0.0
+ */
+
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { auth, db } from "../firebase";

@@ -1,4 +1,14 @@
-// src/pages/CreateJournalEntry.js
+/**
+ * @fileoverview CreateJournalEntry Page
+ * 
+ * 
+ * @module pages/CreateJournalEntry
+ * @requires react
+ * 
+ * @author Tabuledge Development Team
+ * @version 1.0.0
+ */
+
 import React, { useState, useEffect } from "react";
 import {
   collection,
